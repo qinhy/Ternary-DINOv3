@@ -1,0 +1,50 @@
+[build-system]
+requires = ["uv_build>=0.11.28,<0.12"]
+build-backend = "uv_build"
+
+[project]
+name = "ternary-dinov3"
+version = "0.1.0"
+description = "Trainable 1.58-bit DINOv3 vision transformers built with TernaryCNN."
+readme = "README.md"
+requires-python = ">=3.10,<3.14"
+license = { file = "LICENSE" }
+dependencies = [
+    "pillow>=10.0",
+    "ternarycnn[dinov3] @ git+https://github.com/qinhy/TernaryCNN.git",
+    "torch>=2.2",
+    "torchvision>=0.17",
+]
+
+[project.scripts]
+train-ternary-dinov3 = "ternary_dinov3.train:main"
+infer-ternary-dinov3 = "ternary_dinov3.infer:main"
+
+[dependency-groups]
+dev = ["pytest>=8.2", "ruff>=0.12"]
+
+[[tool.uv.index]]
+name = "torch-cuda"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
+[tool.uv.sources]
+ternarycnn = { path = "../TernaryCNN", editable = true }
+torch = { index = "torch-cuda" }
+torchvision = { index = "torch-cuda" }
+
+[tool.uv.build-backend]
+module-name = "ternary_dinov3"
+module-root = "src"
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-config --strict-markers"
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
