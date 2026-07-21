@@ -91,6 +91,7 @@ def main() -> None:
         image_size=32,
         patch_size=8,
         scale_op=args.scale_op,
+        backbone_kwargs={"no_conv":True}, # no any cnn layer
     ).to(device)
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay
