@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 from collections.abc import Mapping
-from copy import deepcopy
+import copy
 from pathlib import Path
 from typing import Any
 
@@ -72,10 +72,16 @@ def load_pretrained_backbone(
 @torch.no_grad()
 def freeze_ternary_weights(model: nn.Module) -> nn.Module:
     """Clone a QAT model and replace Bit layers with frozen inference layers."""
-    clone = getattr(model, "clone", None)
-    frozen = clone() if callable(clone) else deepcopy(model)
-    frozen = frozen.cpu().eval()
-    return convert_to_ternary(frozen)
+    if hasattr(model, "clone") and callable(getattr(model, "clone")):
+        clone: nn.Module = model.clone()
+        clone.load_state_dict(model.state_dict(), strict=True)
+    else:
+        clone = copy.deepcopy(model)
+    clone = convert_to_ternary(clone)
+    clone.eval()
+
+    dev = next(model.parameters()).device
+    return clone.to(dev)
 
 
 def save_weights(
