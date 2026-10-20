@@ -1,5 +1,70 @@
 # Examples
 
+## Distillation from official DINOv3 ViT-S/16
+
+`distill_dinov3.py` trains a ternary `vit_small` to reproduce the official
+full-precision ViT-S/16 class-token embeddings. Both backbones receive the
+exact same augmented, ImageNet-normalized RGB tensor and return `[B, 384]`.
+The loss is `MSE(student(images), teacher(images))`. The teacher stays frozen
+in evaluation mode; only student parameters are optimized. No classification
+head, labels, multi-crop DINO objective, or projection adapter is needed.
+
+Use a local clone of [official DINOv3](https://github.com/facebookresearch/dinov3)
+and its `dinov3_vits16_pretrain_lvd1689m-08c60483.pth` weights. The student starts
+from those same weights with ternary quantization applied during each forward
+pass. The example matches the official storage-token, LayerScale, norm, and
+RoPE configuration, which differs from this project's bare `vit_small` defaults.
+
+Place images in `data/distill/train/images/` and `data/distill/val/images/`.
+These are ImageFolder directories: one arbitrary subdirectory per split is
+enough because labels are ignored. Use distinct training and validation images.
+
+```bash
+uv run python examples/distill_dinov3.py \
+  --teacher-repo ../dinov3 \
+  --teacher-weights ../BitNetCNN/data/dinov3_vits16_pretrain_lvd1689m-08c60483.pth \
+  --train-dir data/distill/train \
+  --val-dir data/distill/val \
+  --device cuda \
+  --epochs 20
+```
+
+The script reports training and validation embedding MSE. It writes a resumable
+`checkpoints/distilled-vits16.pt`, best QAT weights `distilled-vits16-best.pt`,
+and frozen ternary weights `distilled-vits16-best-ternary.pt`. Resume with
+`--resume checkpoints/distilled-vits16.pt` and the same model options;
+`--epochs` is the final epoch. Lower validation MSE selects the best model;
+this metric does not measure classification accuracy.
+
+Progress logs show the first, last, and every 25th batch of training and
+validation, including current and average MSE, learning rate during training,
+elapsed time, estimated time remaining, and images per second. The first batch
+also shows input and output shapes. Use `--log-interval 1` to log every batch,
+or `--log-interval 0` to keep only the epoch summaries.
+
+Load the best embedding backbone with:
+
+```python
+import torch
+from ternary_dinov3 import build_backbone, freeze_ternary_weights
+
+checkpoint = torch.load("checkpoints/distilled-vits16-best.pt", weights_only=True)
+student = build_backbone(**checkpoint["backbone_config"], initialize=False)
+student.load_state_dict(checkpoint["state_dict"])
+student.eval()
+with torch.no_grad():
+    embeddings = student(images)  # images: ImageNet-normalized [B, 3, H, W]
+    patches = student.forward_features(images)["x_norm_patchtokens"]
+```
+
+For the frozen checkpoint, call `freeze_ternary_weights(student)` before
+loading its state dictionary. These are backbone checkpoints; the classifier
+inference CLI expects a different checkpoint format. This example supervises
+the class-token output only; patch embeddings are available but are not
+directly matched by this loss. The MNIST femto model has 64-dimensional features
+and ten class logits, so it cannot directly match the official 384-dimensional
+output without an adapter or architecture change.
+
 ## MNIST with DINOv3 ViT-Femto
 
 The script downloads MNIST, resizes each digit to 32×32, repeats grayscale into

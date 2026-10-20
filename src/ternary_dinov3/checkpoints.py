@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import copy
 import random
 from collections.abc import Mapping
-import copy
 from pathlib import Path
 from typing import Any
 
@@ -34,8 +34,10 @@ def load_checkpoint(path: Path, device: torch.device | str = "cpu") -> dict[str,
 def _find_state_dict(payload: Mapping[str, Any]) -> Mapping[str, torch.Tensor]:
     for key in ("state_dict", "model", "teacher", "student"):
         value = payload.get(key)
-        if isinstance(value, Mapping) and value and all(
-            isinstance(item, torch.Tensor) for item in value.values()
+        if (
+            isinstance(value, Mapping)
+            and value
+            and all(isinstance(item, torch.Tensor) for item in value.values())
         ):
             return value
     if payload and all(isinstance(value, torch.Tensor) for value in payload.values()):
@@ -72,11 +74,9 @@ def load_pretrained_backbone(
 @torch.no_grad()
 def freeze_ternary_weights(model: nn.Module) -> nn.Module:
     """Clone a QAT model and replace Bit layers with frozen inference layers."""
-    if hasattr(model, "clone") and callable(getattr(model, "clone")):
-        clone: nn.Module = model.clone()
-        clone.load_state_dict(model.state_dict(), strict=True)
-    else:
-        clone = copy.deepcopy(model)
+    # Preserve projection subclasses and quantizer settings: backbone.clone()
+    # reconstructs dependency defaults, which can change the frozen output.
+    clone = copy.deepcopy(model)
     clone = convert_to_ternary(clone)
     clone.eval()
 

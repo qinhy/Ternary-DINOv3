@@ -6,6 +6,7 @@ from typing import Any, Literal
 
 import torch
 from ternarylayers import Bit
+from ternarylayers.dinov3.layers.attention import LinearKMaskedBias
 from ternarylayers.dinov3.models import vision_transformer as vits
 from torch import Tensor, nn
 
@@ -40,6 +41,38 @@ ARCHITECTURES: tuple[str, ...] = (
 )
 
 
+class _TernaryKMaskedBias(LinearKMaskedBias):
+    """Keep masked QKV projections ternary in both QAT and frozen inference."""
+
+    def forward(self, images: Tensor) -> Tensor:
+        bias = self.bias * self.bias_mask if self.bias is not None else None
+        return torch.nn.functional.linear(images, self.w_q(self.weight), bias)
+
+    @torch.no_grad()
+    def to_ternary(self, dtype: torch.dtype = torch.int8) -> nn.Module:
+        frozen = super().to_ternary(dtype=dtype)
+        if frozen.bias is not None:
+            frozen.bias.mul_(self.bias_mask)
+        return frozen
+
+
+def _fix_masked_projections(backbone: nn.Module) -> None:
+    # The dependency's masked projection bypasses w_q and its inherited export
+    # omits the bias mask. Replace it without changing checkpoint parameter names.
+    for block in backbone.blocks:
+        source = block.attn.qkv
+        if isinstance(source, LinearKMaskedBias):
+            replacement = _TernaryKMaskedBias(
+                source.in_features, source.out_features, bias=source.bias is not None
+            )
+            replacement.weight = source.weight
+            replacement.bias = source.bias
+            replacement.w_q = source.w_q
+            if source.bias is not None:
+                replacement.bias_mask = source.bias_mask
+            block.attn.qkv = replacement
+
+
 def _set_scale_op(module: nn.Module, scale_op: str) -> None:
     if scale_op not in {"mean", "median"}:
         raise ValueError("scale_op must be 'mean' or 'median'")
@@ -64,6 +97,7 @@ def build_backbone(
         raise ValueError(f"unknown architecture {architecture!r}; choose one of: {choices}")
     factory = getattr(vits, architecture)
     backbone = factory(img_size=image_size, patch_size=patch_size, **kwargs)
+    _fix_masked_projections(backbone)
     _set_scale_op(backbone, scale_op)
     if initialize:
         backbone.init_weights()

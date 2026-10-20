@@ -158,8 +158,9 @@ frozen_model = freeze_ternary_weights(model)
 
 ## Scope
 
-This first release is a supervised fine-tuning shell around the ternary DINOv3
-backbone. The complete multi-crop DINO/iBOT training stack remains in
-TernaryCNN's `ternarylayers.dinov3` package and is not duplicated here. A
-natural next extension is a distillation CLI using a frozen full-precision
-DINOv3 teacher.
+This project supports supervised fine-tuning and simple embedding distillation
+from a frozen official DINOv3 ViT-S/16 teacher. See the
+[distillation example](examples/README.md#distillation-from-official-dinov3-vit-s16)
+for training and loading an embedding backbone. The complete multi-crop
+DINO/iBOT training stack remains in TernaryCNN's `ternarylayers.dinov3` package
+and is not duplicated here.

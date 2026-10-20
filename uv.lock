@@ -999,9 +999,14 @@ provides-extras = ["augment", "dinov3", "dinov3-eval"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "huggingface-hub", specifier = ">=2.1.1" },
+    { name = "nvidia-modelopt", extras = ["cu12"], specifier = ">=0.47.0" },
     { name = "pytest", specifier = ">=8.2" },
     { name = "pytest-cov", specifier = ">=5" },
+    { name = "requests", specifier = ">=2.34.2" },
     { name = "ruff", specifier = ">=0.12" },
+    { name = "tensorrt-cu12", specifier = ">=11.3.0.99" },
+    { name = "torch-tensorrt", specifier = ">=2.13.0" },
     { name = "triton", marker = "sys_platform != 'win32'" },
     { name = "triton-windows", marker = "sys_platform == 'win32'", specifier = ">=3.7.1.post27" },
 ]
