@@ -15,9 +15,10 @@ from those same weights with ternary quantization applied during each forward
 pass. The example matches the official storage-token, LayerScale, norm, and
 RoPE configuration, which differs from this project's bare `vit_small` defaults.
 
-Place images in `data/distill/train/images/` and `data/distill/val/images/`.
-These are ImageFolder directories: one arbitrary subdirectory per split is
-enough because labels are ignored. Use distinct training and validation images.
+Place images directly in `data/distill/train/` and `data/distill/val/`, or in
+subfolders. Images are discovered recursively; class folders and annotations
+are unnecessary. Flat COCO `train2017` and `val2017` directories work directly.
+Use distinct training and validation images.
 
 ```bash
 uv run python examples/distill_dinov3.py \

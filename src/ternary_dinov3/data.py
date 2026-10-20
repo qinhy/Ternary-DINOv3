@@ -1,4 +1,4 @@
-"""ImageFolder and deterministic synthetic datasets."""
+"""Labeled, unlabeled, and deterministic synthetic image datasets."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from pathlib import Path
 import torch
 from torch.utils.data import DataLoader, Dataset
 from torchvision import datasets, transforms
+from torchvision.datasets.folder import IMG_EXTENSIONS, default_loader
 
 
 class SyntheticClassificationDataset(Dataset[tuple[torch.Tensor, int]]):
@@ -41,6 +42,34 @@ def imagefolder(path: Path, image_size: int, *, training: bool) -> datasets.Imag
     return datasets.ImageFolder(path, transform=image_transform(image_size, training=training))
 
 
+class UnlabeledImageDataset(Dataset[tuple[torch.Tensor, int]]):
+    """Read images recursively, including flat COCO-style directories.
+
+    Return a dummy label to share the existing distillation batch interface.
+    No class folders or annotation files are required.
+    """
+
+    def __init__(self, path: Path, image_size: int, *, training: bool) -> None:
+        path = Path(path)
+        if not path.is_dir():
+            raise FileNotFoundError(f"Image directory does not exist: {path}")
+        self.samples = sorted(
+            item
+            for item in path.rglob("*")
+            if item.is_file() and item.suffix.lower() in IMG_EXTENSIONS
+        )
+        if not self.samples:
+            raise FileNotFoundError(f"No supported image files found in: {path}")
+        self.transform = image_transform(image_size, training=training)
+
+    def __len__(self) -> int:
+        return len(self.samples)
+
+    def __getitem__(self, index: int) -> tuple[torch.Tensor, int]:
+        image = default_loader(str(self.samples[index]))
+        return self.transform(image), 0
+
+
 def create_loader(
     dataset: Dataset,
     *,
@@ -56,4 +85,3 @@ def create_loader(
         pin_memory=torch.cuda.is_available(),
         drop_last=training and len(dataset) >= batch_size,
     )
-

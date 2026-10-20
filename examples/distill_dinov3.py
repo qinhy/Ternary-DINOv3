@@ -22,7 +22,7 @@ from ternary_dinov3.checkpoints import (
     load_checkpoint,
     load_pretrained_backbone,
 )
-from ternary_dinov3.data import create_loader, imagefolder
+from ternary_dinov3.data import UnlabeledImageDataset, create_loader
 from ternary_dinov3.distillation import run_distillation_epoch
 from ternary_dinov3.engine import select_device
 from ternary_dinov3.model import build_backbone
@@ -35,8 +35,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--teacher-weights", type=Path, required=True, help="Official ViT-S/16 weights"
     )
-    parser.add_argument("--train-dir", type=Path, required=True, help="ImageFolder training root")
-    parser.add_argument("--val-dir", type=Path, required=True, help="ImageFolder validation root")
+    parser.add_argument(
+        "--train-dir", type=Path, required=True, help="Training images (flat or nested folders)"
+    )
+    parser.add_argument(
+        "--val-dir", type=Path, required=True, help="Validation images (flat or nested folders)"
+    )
     parser.add_argument("--image-size", type=int, default=224)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--epochs", type=int, default=20)
@@ -134,18 +138,22 @@ def main() -> None:
             )
 
     train_loader = create_loader(
-        imagefolder(args.train_dir, args.image_size, training=True),
+        UnlabeledImageDataset(args.train_dir, args.image_size, training=True),
         batch_size=args.batch_size,
         workers=args.workers,
         training=True,
     )
     val_loader = create_loader(
-        imagefolder(args.val_dir, args.image_size, training=False),
+        UnlabeledImageDataset(args.val_dir, args.image_size, training=False),
         batch_size=args.batch_size,
         workers=args.workers,
         training=False,
     )
     print(f"distilling official ViT-S/16 into ternary vit_small on {device}")
+    print(
+        f"images: train={len(train_loader.dataset)} val={len(val_loader.dataset)}",
+        flush=True,
+    )
     for epoch in range(start_epoch + 1, args.epochs + 1):
         log_options = {
             "log_interval": args.log_interval,
