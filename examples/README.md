@@ -20,6 +20,23 @@ subfolders. Images are discovered recursively; class folders and annotations
 are unnecessary. Flat COCO `train2017` and `val2017` directories work directly.
 Use distinct training and validation images.
 
+Images keep their original resolution by default. Each image is padded only on
+the right and bottom to the next multiple of the 16-pixel patch size (zero to
+15 pixels per edge). Padding is zero in normalized space, equivalent to the
+ImageNet mean color. There is no resize or crop; training uses a random horizontal
+flip, while validation is deterministic. For example, a 641×479 image becomes
+656×480 (width×height).
+
+Within each loader batch, images with the same padded dimensions are stacked
+and forwarded together. Different shapes run separately with gradients
+accumulated into one optimizer step. Loss is averaged over images, and both
+models see identical padding. No extra padding is added to match larger images.
+Original-resolution inputs take more memory and computation than 224×224 inputs;
+reduce `--batch-size` if necessary. To use the previous square-resize pipeline
+with RandAugment, pass `--image-size 224` explicitly.
+When resuming a resized run at original resolution, the script resets the best
+validation MSE because losses from different preprocessing are not comparable.
+
 ```bash
 uv run python examples/distill_dinov3.py \
   --teacher-repo ../dinov3 \

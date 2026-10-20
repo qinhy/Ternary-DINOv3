@@ -41,7 +41,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--val-dir", type=Path, required=True, help="Validation images (flat or nested folders)"
     )
-    parser.add_argument("--image-size", type=int, default=224)
+    parser.add_argument(
+        "--image-size",
+        type=int,
+        default=None,
+        help="Resize to a square; by default preserve original size and pad to multiples of 16",
+    )
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--learning-rate", type=float, default=1e-4)
@@ -59,7 +64,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--resume", type=Path)
     parser.add_argument("--save", type=Path, default=Path("checkpoints/distilled-vits16.pt"))
     args = parser.parse_args()
-    if args.image_size <= 0 or args.image_size % 16:
+    if args.image_size is not None and (args.image_size <= 0 or args.image_size % 16):
         parser.error("--image-size must be a positive multiple of 16")
     if args.epochs <= 0 or args.batch_size <= 0 or args.workers < 0:
         parser.error("epochs and batch size must be positive; workers must be non-negative")
@@ -92,7 +97,7 @@ def main() -> None:
     # Match the official small model, including settings absent from factory defaults.
     config = {
         "architecture": "vit_small",
-        "image_size": args.image_size,
+        "image_size": args.image_size or 224,
         "patch_size": 16,
         "scale_op": args.scale_op,
         "pos_embed_rope_base": 100.0,
@@ -105,6 +110,7 @@ def main() -> None:
         "mask_k_bias": True,
     }
     payload = load_checkpoint(args.resume) if args.resume else None
+    input_config = {"image_size": args.image_size, "patch_size": 16}
     if payload is not None:
         if payload.get("format") != "ternary-dinov3-distillation-v1":
             raise ValueError("resume requires a distillation training checkpoint")
@@ -126,6 +132,12 @@ def main() -> None:
         optimizer.load_state_dict(payload["optimizer_state_dict"])
         _optimizer_to_device(optimizer, device)
         start_epoch, best_loss = payload["epoch"], payload["best_loss"]
+        previous_input = payload.get(
+            "input_config", {"image_size": config["image_size"], "patch_size": 16}
+        )
+        if previous_input != input_config:
+            best_loss = float("inf")
+            print("input preprocessing changed; resetting best validation MSE", flush=True)
         scheduler.load_state_dict(payload["scheduler_state_dict"])
         scheduler.T_max = args.epochs
         # Recompute the current rate when extending a completed cosine schedule.
@@ -151,6 +163,12 @@ def main() -> None:
     )
     print(f"distilling official ViT-S/16 into ternary vit_small on {device}")
     print(
+        "input: original resolution, minimal right/bottom padding to patch size 16"
+        if args.image_size is None
+        else f"input: resize to {args.image_size}x{args.image_size}",
+        flush=True,
+    )
+    print(
         f"images: train={len(train_loader.dataset)} val={len(val_loader.dataset)}",
         flush=True,
     )
@@ -172,6 +190,7 @@ def main() -> None:
             "format": "ternary-dinov3-distillation-weights-v1",
             "epoch": epoch,
             "backbone_config": config,
+            "input_config": input_config,
             "state_dict": student.state_dict(),
             "metrics": metrics,
         }

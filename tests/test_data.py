@@ -39,3 +39,30 @@ def test_unlabeled_missing_or_empty_directory(tmp_path: Path) -> None:
         UnlabeledImageDataset(tmp_path / "missing", 32, training=False)
     with pytest.raises(FileNotFoundError, match="No supported image"):
         UnlabeledImageDataset(tmp_path, 32, training=False)
+
+
+def test_original_resolution_minimal_padding_and_batching(tmp_path: Path) -> None:
+    # Width, height: portrait, landscape, already aligned, and another portrait.
+    sizes = [(19, 33), (34, 18), (32, 48), (20, 34)]
+    for index, size in enumerate(sizes):
+        Image.new("RGB", size, (30, 100, 200)).save(tmp_path / f"{index}.png")
+    dataset = UnlabeledImageDataset(tmp_path, training=False)
+    for index, (width, height) in enumerate(sizes):
+        image, _ = dataset[index]
+        assert image.shape == (3, (height + 15) // 16 * 16, (width + 15) // 16 * 16)
+        expected = torch.tensor([30, 100, 200]) / 255 - torch.tensor([0.485, 0.456, 0.406])
+        expected /= torch.tensor([0.229, 0.224, 0.225])
+        torch.testing.assert_close(
+            image[:, :height, :width], expected[:, None, None].expand(3, height, width)
+        )
+        assert torch.count_nonzero(image[:, height:, :]) == 0
+        assert torch.count_nonzero(image[:, :, width:]) == 0
+    groups, labels = next(iter(create_loader(dataset, batch_size=4, workers=0, training=False)))
+    assert sorted(tuple(group.shape) for group in groups) == [(1, 3, 32, 48), (3, 3, 48, 32)]
+    assert labels.tolist() == [0, 0, 0, 0]
+
+
+def test_original_resolution_uses_requested_patch_size(tmp_path: Path) -> None:
+    Image.new("RGB", (9, 17)).save(tmp_path / "image.png")
+    image, _ = UnlabeledImageDataset(tmp_path, training=False, patch_size=8)[0]
+    assert image.shape == (3, 24, 16)

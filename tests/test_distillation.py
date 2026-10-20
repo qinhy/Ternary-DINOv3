@@ -3,6 +3,7 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
+from ternary_dinov3.data import collate_image_groups
 from ternary_dinov3.distillation import run_distillation_epoch
 
 
@@ -53,3 +54,26 @@ def test_distillation_evaluation_leaves_student_unchanged() -> None:
     assert torch.equal(student.weight, before)
     assert not student.training
     assert all(param.grad is None for param in student.parameters())
+
+
+def test_mixed_resolution_matches_per_image_loss_and_gradient() -> None:
+    torch.manual_seed(7)
+    student = nn.Sequential(nn.AdaptiveAvgPool2d(1), nn.Flatten(), nn.Linear(3, 4))
+    teacher = nn.Sequential(nn.AdaptiveAvgPool2d(1), nn.Flatten(), nn.Linear(3, 4))
+    samples = [(torch.randn(3, h, w), 0) for h, w in [(16, 32), (32, 16), (16, 32)]]
+    loader = DataLoader(samples, batch_size=3, collate_fn=collate_image_groups)
+    expected = sum(
+        torch.nn.functional.mse_loss(student(image[None]), teacher(image[None]).detach())
+        for image, _ in samples
+    ) / len(samples)
+    expected.backward()
+    expected_grad = student[2].weight.grad.clone()
+    student.zero_grad(set_to_none=True)
+    weight = student[2].weight.detach().clone()
+    optimizer = torch.optim.SGD(student.parameters(), lr=0.1)
+    result = run_distillation_epoch(
+        student, teacher, loader, torch.device("cpu"), optimizer=optimizer, log_interval=0
+    )
+    assert result["loss"] == pytest.approx(expected.item())
+    torch.testing.assert_close(student[2].weight, weight - 0.1 * expected_grad)
+    assert all(parameter.grad is None for parameter in teacher.parameters())

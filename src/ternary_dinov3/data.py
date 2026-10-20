@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import torch
+from torch.nn import functional as F
 from torch.utils.data import DataLoader, Dataset
 from torchvision import datasets, transforms
 from torchvision.datasets.folder import IMG_EXTENSIONS, default_loader
@@ -23,10 +24,14 @@ class SyntheticClassificationDataset(Dataset[tuple[torch.Tensor, int]]):
         return self.images[index], int(self.targets[index])
 
 
-def image_transform(image_size: int, *, training: bool) -> transforms.Compose:
-    operations: list[object] = [transforms.Resize((image_size, image_size))]
+def image_transform(image_size: int | None, *, training: bool) -> transforms.Compose:
+    operations: list[object] = []
+    if image_size is not None:
+        operations.append(transforms.Resize((image_size, image_size)))
     if training:
-        operations.extend([transforms.RandomHorizontalFlip(), transforms.RandAugment()])
+        operations.append(transforms.RandomHorizontalFlip())
+        if image_size is not None:
+            operations.append(transforms.RandAugment())
     operations.extend(
         [
             transforms.ToTensor(),
@@ -49,7 +54,13 @@ class UnlabeledImageDataset(Dataset[tuple[torch.Tensor, int]]):
     No class folders or annotation files are required.
     """
 
-    def __init__(self, path: Path, image_size: int, *, training: bool) -> None:
+    def __init__(
+        self, path: Path, image_size: int | None = None, *, training: bool, patch_size: int = 16
+    ) -> None:
+        if patch_size <= 0:
+            raise ValueError("patch_size must be positive")
+        self.image_size = image_size
+        self.patch_size = patch_size
         path = Path(path)
         if not path.is_dir():
             raise FileNotFoundError(f"Image directory does not exist: {path}")
@@ -67,7 +78,24 @@ class UnlabeledImageDataset(Dataset[tuple[torch.Tensor, int]]):
 
     def __getitem__(self, index: int) -> tuple[torch.Tensor, int]:
         image = default_loader(str(self.samples[index]))
-        return self.transform(image), 0
+        image = self.transform(image)
+        if self.image_size is None:
+            height, width = image.shape[-2:]
+            # Zero after normalization represents the ImageNet mean color.
+            image = F.pad(image, (0, -width % self.patch_size, 0, -height % self.patch_size))
+        return image, 0
+
+
+def collate_image_groups(
+    samples: list[tuple[torch.Tensor, int]],
+) -> tuple[list[torch.Tensor], torch.Tensor]:
+    """Stack equal shapes without adding any extra batch padding."""
+    groups: dict[tuple[int, ...], list[torch.Tensor]] = {}
+    for image, _ in samples:
+        groups.setdefault(tuple(image.shape), []).append(image)
+    return [torch.stack(images) for images in groups.values()], torch.tensor(
+        [label for _, label in samples]
+    )
 
 
 def create_loader(
@@ -84,4 +112,9 @@ def create_loader(
         num_workers=workers,
         pin_memory=torch.cuda.is_available(),
         drop_last=training and len(dataset) >= batch_size,
+        collate_fn=(
+            collate_image_groups
+            if isinstance(dataset, UnlabeledImageDataset) and dataset.image_size is None
+            else None
+        ),
     )

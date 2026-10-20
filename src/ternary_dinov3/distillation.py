@@ -27,6 +27,9 @@ def run_distillation_epoch(
     optimizer containing only student parameters. Omitting it evaluates MSE.
     Log the first, last, and every ``log_interval`` batches; zero disables
     progress output. ``log_prefix`` can identify the current epoch or run.
+    The loader may return a tensor or a list of tensor groups with different
+    spatial sizes. Group losses are weighted by image count, with one optimizer
+    step per loader batch and a separate backward pass per group to save memory.
     """
     if log_interval < 0:
         raise ValueError("log_interval must be non-negative")
@@ -44,25 +47,33 @@ def run_distillation_epoch(
     context = torch.enable_grad() if optimizer is not None else torch.no_grad()
     with context:
         for batch_index, (images, _) in enumerate(loader, start=1):
-            images = images.to(device, non_blocking=True)
-            with torch.no_grad():
-                target = teacher(images)
+            groups = [images] if isinstance(images, torch.Tensor) else images
+            batch = sum(group.shape[0] for group in groups)
+            batch_loss = 0.0
+            input_shapes, output_shapes = [], []
             if optimizer is not None:
                 optimizer.zero_grad(set_to_none=True)
-            output = student(images)
-            if not isinstance(output, torch.Tensor) or not isinstance(target, torch.Tensor):
-                raise ValueError("student and teacher must return tensors")
-            if output.shape != target.shape:
-                raise ValueError(
-                    f"student output {tuple(output.shape)} and teacher output "
-                    f"{tuple(target.shape)} must have the same shape"
-                )
-            loss = F.mse_loss(output.float(), target.float())
+            for group in groups:
+                group = group.to(device, non_blocking=True)
+                with torch.no_grad():
+                    target = teacher(group)
+                output = student(group)
+                if not isinstance(output, torch.Tensor) or not isinstance(target, torch.Tensor):
+                    raise ValueError("student and teacher must return tensors")
+                if output.shape != target.shape:
+                    raise ValueError(
+                        f"student output {tuple(output.shape)} and teacher output "
+                        f"{tuple(target.shape)} must have the same shape"
+                    )
+                loss = F.mse_loss(output.float(), target.float()) * (group.shape[0] / batch)
+                if optimizer is not None:
+                    loss.backward()
+                batch_loss += float(loss.detach())
+                input_shapes.append(tuple(group.shape))
+                output_shapes.append(tuple(output.shape))
+                del output, target, loss
             if optimizer is not None:
-                loss.backward()
                 optimizer.step()
-            batch = images.shape[0]
-            batch_loss = float(loss.detach())
             loss_total += batch_loss * batch
             count += batch
             if log_interval and (
@@ -73,7 +84,7 @@ def run_distillation_epoch(
                 remaining = elapsed / batch_index * (total_batches - batch_index)
                 lr = f" lr={optimizer.param_groups[0]['lr']:.3e}" if optimizer else ""
                 shapes = (
-                    f" input={tuple(images.shape)} output={tuple(output.shape)}"
+                    f" groups={len(groups)} input={input_shapes[:3]} output={output_shapes[:3]}"
                     if batch_index == 1
                     else ""
                 )
