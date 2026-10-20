@@ -58,7 +58,7 @@ def parse_args() -> argparse.Namespace:
         default=25,
         help="Print progress every N batches, plus first and last; 0 disables batch logs",
     )
-    parser.add_argument("--device", choices=("auto", "cpu", "cuda", "mps"), default="auto")
+    parser.add_argument("--device", choices=("auto", "cpu", "cuda", "cuda:0", "cuda:1", "mps"), default="auto")
     parser.add_argument("--scale-op", choices=("mean", "median"), default="median")
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--resume", type=Path)
