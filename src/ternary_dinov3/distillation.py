@@ -57,7 +57,9 @@ def run_distillation_epoch(
                 group = group.to(device, non_blocking=True)
                 with torch.no_grad():
                     target = teacher.forward_features(group)
+                    target = torch.cat([target["x_norm_clstoken"].unsqueeze(1), target["x_norm_patchtokens"]], dim=1)
                 output = student.forward_features(group)
+                output = torch.cat([output["x_norm_clstoken"].unsqueeze(1), output["x_norm_patchtokens"]], dim=1)
                 if not isinstance(output, torch.Tensor) or not isinstance(target, torch.Tensor):
                     raise ValueError("student and teacher must return tensors")
                 if output.shape != target.shape:
