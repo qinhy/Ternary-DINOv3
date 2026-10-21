@@ -939,7 +939,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "pillow", specifier = ">=10.0" },
-    { name = "ternarycnn", extras = ["dinov3"], editable = "../TernaryCNN" },
+    { name = "ternarycnn", extras = ["dinov3"], git = "https://github.com/qinhy/TernaryCNN.git" },
     { name = "torch", specifier = ">=2.2", index = "https://download.pytorch.org/whl/cu126" },
     { name = "torchvision", specifier = ">=0.17", index = "https://download.pytorch.org/whl/cu126" },
 ]
@@ -953,7 +953,7 @@ dev = [
 [[package]]
 name = "ternarycnn"
 version = "0.1.0"
-source = { editable = "../TernaryCNN" }
+source = { git = "https://github.com/qinhy/TernaryCNN.git#87d1653de302272ea6bd4a5e00ba849eba2f5a77" }
 dependencies = [
     { name = "pydantic" },
     { name = "torch" },
@@ -971,44 +971,6 @@ dinov3 = [
     { name = "submitit" },
     { name = "termcolor" },
     { name = "torchmetrics" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "albumentations", marker = "extra == 'augment'", specifier = ">=2.0" },
-    { name = "ftfy", marker = "extra == 'dinov3-eval'", specifier = ">=6.2" },
-    { name = "matplotlib", marker = "extra == 'dinov3-eval'", specifier = ">=3.8" },
-    { name = "numpy", marker = "extra == 'augment'", specifier = ">=1.26" },
-    { name = "numpy", marker = "extra == 'dinov3'", specifier = ">=1.26" },
-    { name = "omegaconf", marker = "extra == 'dinov3'", specifier = ">=2.3" },
-    { name = "opencv-python-headless", marker = "extra == 'augment'", specifier = ">=4.9" },
-    { name = "openpyxl", marker = "extra == 'dinov3-eval'", specifier = ">=3.1" },
-    { name = "pandas", marker = "extra == 'dinov3-eval'", specifier = ">=2.2" },
-    { name = "pillow", marker = "extra == 'dinov3'", specifier = ">=10" },
-    { name = "pydantic", specifier = ">=2.7" },
-    { name = "pyyaml", marker = "extra == 'dinov3'", specifier = ">=6" },
-    { name = "regex", marker = "extra == 'dinov3-eval'", specifier = ">=2024.5.15" },
-    { name = "scikit-learn", marker = "extra == 'dinov3-eval'", specifier = ">=1.4" },
-    { name = "submitit", marker = "extra == 'dinov3'", specifier = ">=1.5" },
-    { name = "termcolor", marker = "extra == 'dinov3'", specifier = ">=2.4" },
-    { name = "torch", specifier = ">=2.2", index = "https://download.pytorch.org/whl/cu126" },
-    { name = "torchmetrics", marker = "extra == 'dinov3'", specifier = ">=1.4" },
-    { name = "torchvision", specifier = ">=0.17", index = "https://download.pytorch.org/whl/cu126" },
-]
-provides-extras = ["augment", "dinov3", "dinov3-eval"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "huggingface-hub", specifier = ">=2.1.1" },
-    { name = "nvidia-modelopt", extras = ["cu12"], specifier = ">=0.47.0" },
-    { name = "pytest", specifier = ">=8.2" },
-    { name = "pytest-cov", specifier = ">=5" },
-    { name = "requests", specifier = ">=2.34.2" },
-    { name = "ruff", specifier = ">=0.12" },
-    { name = "tensorrt-cu12", specifier = ">=11.3.0.99" },
-    { name = "torch-tensorrt", specifier = ">=2.13.0" },
-    { name = "triton", marker = "sys_platform != 'win32'" },
-    { name = "triton-windows", marker = "sys_platform == 'win32'", specifier = ">=3.7.1.post27" },
 ]
 
 [[package]]

@@ -29,7 +29,7 @@ url = "https://download.pytorch.org/whl/cu126"
 explicit = true
 
 [tool.uv.sources]
-ternarycnn = { path = "../TernaryCNN", editable = true }
+# ternarycnn = { path = "../TernaryCNN", editable = true }
 torch = { index = "torch-cuda" }
 torchvision = { index = "torch-cuda" }
 
