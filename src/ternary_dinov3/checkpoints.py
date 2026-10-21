@@ -64,6 +64,8 @@ def load_pretrained_backbone(
     strict: bool = True,
 ) -> torch.nn.modules.module._IncompatibleKeys:
     """Load plain, official-style, or project weights into a backbone."""
+    if isinstance(checkpoint, str):
+        checkpoint = Path(checkpoint)
     payload = load_checkpoint(checkpoint) if isinstance(checkpoint, Path) else checkpoint
     state = {_strip_prefixes(key): value for key, value in _find_state_dict(payload).items()}
     expected = backbone.state_dict()

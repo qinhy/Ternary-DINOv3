@@ -222,3 +222,27 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+######## vis test 
+# import torch
+# from pathlib import Path
+# from ternary_dinov3.model import build_backbone
+# from ternary_dinov3.checkpoints import freeze_ternary_weights,load_pretrained_backbone
+# from ternary_dinov3.gui import DinoPatchSimilarityViewer
+# model = freeze_ternary_weights(build_backbone("vit_small")
+# load_pretrained_backbone(model,"./distilled-vits16-best-ternary.pt")
+
+# teacher = (
+#     torch.hub.load(
+#         str("../dinov3"),
+#         "dinov3_vits16",
+#         source="local",
+#         pretrained=True,
+#         weights=str("your/dinov3_vits16_pretrain_lvd1689m-08c60483.pth"),
+#     )
+#     .eval()
+#     .requires_grad_(False)
+# )
+# # model = teacher
+
+# DinoPatchSimilarityViewer.show_images(model,list(Path("your/images").rglob("*.jpg")))

@@ -21,7 +21,11 @@ train-ternary-dinov3 = "ternary_dinov3.train:main"
 infer-ternary-dinov3 = "ternary_dinov3.infer:main"
 
 [dependency-groups]
-dev = ["pytest>=8.2", "ruff>=0.12"]
+dev = [
+    "matplotlib>=3.10.9",
+    "pytest>=8.2",
+    "ruff>=0.12",
+]
 
 [[tool.uv.index]]
 name = "torch-cuda"

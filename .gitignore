@@ -9,3 +9,4 @@ dist/
 checkpoints/
 data/
 
+*.pt
