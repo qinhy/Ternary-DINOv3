@@ -11,7 +11,7 @@ requires-python = ">=3.10,<3.14"
 license = { file = "LICENSE" }
 dependencies = [
     "pillow>=10.0",
-    "ternarycnn[dinov3] @ git+https://github.com/qinhy/TernaryCNN.git",
+    "ternarycnn[dinov3]",
     "torch>=2.2",
     "torchvision>=0.17",
 ]
@@ -36,6 +36,7 @@ explicit = true
 # ternarycnn = { path = "../TernaryCNN", editable = true }
 torch = { index = "torch-cuda" }
 torchvision = { index = "torch-cuda" }
+ternarycnn = { git = "https://github.com/qinhy/TernaryCNN" }
 
 [tool.uv.build-backend]
 module-name = "ternary_dinov3"

@@ -229,7 +229,8 @@ if __name__ == "__main__":
 # from ternary_dinov3.model import build_backbone
 # from ternary_dinov3.checkpoints import freeze_ternary_weights,load_pretrained_backbone
 # from ternary_dinov3.gui import DinoPatchSimilarityViewer
-# model = freeze_ternary_weights(build_backbone("vit_small")
+# ckpt = torch.load("./distilled-vits16-best-ternary.pt",map_location="cpu",weights_only=False,)
+# model = freeze_ternary_weights(build_backbone(**ckpt["backbone_config"]))
 # load_pretrained_backbone(model,"./distilled-vits16-best-ternary.pt")
 
 # teacher = (
