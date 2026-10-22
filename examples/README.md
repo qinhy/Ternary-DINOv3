@@ -180,3 +180,126 @@ uv run python examples/train_mnist_trm.py \
   --device cuda \
   --no-track-latent-grads
 ```
+
+## Matryoshka distillation
+
+`distill_dinov3_matryoshka.py` trains a shared width/depth-elastic ternary ViT
+against a frozen official DINOv3 teacher, with two complementary objectives:
+
+- **CLS:** MSE against centered teacher PCA scores. For student width `w`, use
+  the first `w` principal components, ordered by training-set variance.
+- **Patches:** temperature-scaled KL between teacher/student row-wise cosine
+  similarity distributions. Teacher relations use **all** feature channels,
+  independent of student width. Diagonal entries are masked. The inputs are
+  `x_norm_patchtokens`, so CLS is not dropped a second time.
+
+The combined loss is `cls_loss_weight * cls_mse + patch_loss_weight * patch_kl`.
+Both weights default to 1.0 and patch temperature defaults to 0.1. Storage tokens
+are retained internally but excluded from both objectives. No learned output
+adapter is added to the student or its exports. PCA captures high-variance
+teacher directions; downstream semantic quality still needs evaluation.
+
+```bash
+uv run python examples/distill_dinov3_matryoshka.py \
+  --teacher-repo ../dinov3 \
+  --teacher-weights path/to/dinov3_vits16_pretrain_lvd1689m-08c60483.pth \
+  --train-dir data/distill/train \
+  --val-dir data/distill/val \
+  --architecture vit_matryoshka_small \
+  --batch-size 8 --device cuda
+```
+
+All eight `vit_matryoshka_*` factories are supported: `femto`, `pico`, `micro`,
+`nano`, `tiny`, `small`, `base`, and `large`. Default training/export includes
+all width/depth splits that fit the selected parent. For example, Small includes
+Small, Tiny, Nano, Micro, Pico, and Femto. To train a subset, add
+`--subnets small pico femto`. Pico is width 64, depth 6, one head, FFN ratio 4.0.
+Its backbone has about 0.35M parameters at patch size 16; the official-style
+storage tokens and LayerScale add a small number of parameters.
+
+The default teacher is `dinov3_vits16`. For Base or Large students use a teacher
+at least as wide and deep, such as `--teacher-model dinov3_vitl16` with its
+corresponding official weights. Initialization copies compatible teacher
+prefixes, slicing Q/K/V groups separately. The student's linear patch projector
+receives the flattened convolutional teacher weights. `no_conv=True` lets each
+active patch projection recompute quantization after width slicing.
+
+Inputs use the existing original-resolution grouping and minimal padding to
+16-pixel multiples. Pass `--image-size 224` for square resizing. Each image group
+runs the teacher once, then every selected student subnet. Training averages
+loss equally over selected subnets and over images, with one optimizer step
+per loader batch and separate backward passes to limit activation memory.
+Logs report the combined loss, CLS MSE and patch KL separately for each subnet.
+
+Before a new run, PCA is fit on up to `--pca-samples 8192` randomly sampled training
+images using deterministic evaluation preprocessing. Validation data is never
+used for calibration. Streaming float64 covariance accumulation bounds memory
+by teacher width, rather than calibration-set size. One fixed basis and mean
+are reused for every batch and subnet, without whitening. Use diverse calibration
+samples well above the largest target width to estimate its components reliably;
+very small datasets produce rank-deficient covariance and uninformative trailing
+components. Calibration requires at least two images.
+
+```bash
+# Add these options to the training command to tune the two objectives:
+--pca-samples 8192 --cls-loss-weight 1.0 --patch-loss-weight 1.0 \
+  --patch-temperature 0.1 --patch-query-chunk-size 256
+```
+
+The patch KL preserves `reduction="batchmean"` and the `temperature**2` factor:
+it sums over all query/key pairs and divides by batch size, **not** by the number
+of patches. Its scale therefore depends on image resolution; tune the weights
+for the intended inputs. Similarity query rows are chunked and checkpointed
+during backward, while retaining every key in each row's softmax. This reproduces
+the full-matrix objective without storing all query-row activations. Set
+`--patch-query-chunk-size 0` for an unchunked calculation. Images with at most one
+patch have no non-self spatial relations and contribute zero patch loss.
+
+A download-free check exercises training, validation, checkpoints and exports
+with a synthetic ternary teacher (it does not evaluate distillation quality):
+
+```bash
+uv run python examples/distill_dinov3_matryoshka.py \
+  --smoke-test --device cpu --save checkpoints/matryoshka-smoke.pt
+```
+
+With the default save path, output files are:
+
+- `checkpoints/distilled-matryoshka.pt`: resumable shared weights, optimizer,
+  schedule, random states, loss configuration, and fixed teacher CLS PCA state.
+- `checkpoints/distilled-matryoshka-best.pt`: shared QAT weights selected by
+  lowest combined validation loss averaged over the selected subnets.
+- `checkpoints/distilled-matryoshka-best-NAME.pt`: extracted ordinary QAT ViT.
+- `checkpoints/distilled-matryoshka-best-NAME-ternary.pt`: extracted, frozen ViT.
+
+The shared elastic model is never frozen directly. Extraction happens first,
+then each compact model's ternary weights and scales are frozen. Resume with
+`--resume checkpoints/distilled-matryoshka.pt`; `--epochs` specifies the final
+epoch. Architecture, subnet selection and teacher must match. The saved PCA
+basis is restored without recalibration; it is also recorded in shared and
+standalone exports for interpretation, and adds no inference parameters.
+Changing input preprocessing or loss settings resets the best validation loss.
+Existing v1 channel-prefix-MSE training checkpoints can continue: model,
+optimizer and schedule are restored, PCA is calibrated once, and the old best
+loss is reset. New training checkpoints use v2. The original single-model
+checkpoint formats and script remain separate.
+
+Load an extracted ordinary backbone using its exact exported configuration:
+
+```python
+from ternary_dinov3.checkpoints import load_checkpoint, freeze_ternary_weights
+from ternary_dinov3.matryoshka import build_exported_backbone
+
+checkpoint = load_checkpoint("checkpoints/distilled-matryoshka-best-pico.pt")
+model = build_exported_backbone(**checkpoint["backbone_config"], initialize=False)
+# For a *-ternary.pt checkpoint, freeze the structure before loading:
+# model = freeze_ternary_weights(model)
+model.load_state_dict(checkpoint["state_dict"], strict=True)
+model.eval()
+embeddings = model(images)  # [batch, subnet_width]
+```
+
+To rebuild a shared checkpoint, use
+`build_matryoshka_backbone(**checkpoint["backbone_config"], initialize=False)`
+and load its state dictionary. This workflow requires a TernaryCNN revision
+containing the Matryoshka model factories.
