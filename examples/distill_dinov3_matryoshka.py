@@ -397,3 +397,30 @@ def main(argv: list[str] | None = None) -> None:
 
 if __name__ == "__main__":
     main()
+
+# from pathlib import Path
+# from ternary_dinov3.checkpoints import (
+#     freeze_ternary_weights,
+#     load_checkpoint,
+# )
+# from ternary_dinov3.gui import DinoPatchSimilarityViewer
+# from ternary_dinov3.matryoshka import build_exported_backbone
+
+# def load_ternary_checkpoint(p="./distilled-matryoshka-best-tiny-ternary.pt"):
+#     checkpoint = load_checkpoint(Path(p),device="cpu",)
+
+#     model = build_exported_backbone(
+#         **checkpoint["backbone_config"],initialize=False,)
+#     model = freeze_ternary_weights(model)
+#     model.load_state_dict(checkpoint["state_dict"], strict=True)
+#     model.eval()
+#     return model
+
+# images = sorted(Path("your/images").rglob("*.jpg"))
+
+# DinoPatchSimilarityViewer.show_images(
+#     model,
+#     images,
+#     size=224,
+#     batch_size=1,
+# )
