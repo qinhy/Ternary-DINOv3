@@ -16,7 +16,7 @@ import random
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import torch
 import torch.nn.functional as F
@@ -32,10 +32,8 @@ from ternary_dinov3.checkpoints import (
 )
 from ternary_dinov3.engine import select_device
 from ternarylayers.dinov3.layers.bitlayers import Linear as BitLinear
-from ternarylayers.dinov3.models.vision_transformer import (
-    DinoVisionTransformerTRM,
-    vit_femto,
-)
+from ternarylayers.dinov3.models.vision_transformer_trm import DinoVisionTransformerTRM
+from ternarylayers.dinov3.models.vision_transformer import vit_femto
 
 
 @dataclass
@@ -167,6 +165,7 @@ class TernaryDINOv3TRMClassifier(nn.Module):
         dropout: float = 0.1,
         scale_op: str = "median",
         track_latent_grads: bool = True,
+        backbone_kwargs: dict[str, Any] | None = None,
     ) -> None:
         super().__init__()
         self.num_classes = num_classes
@@ -176,6 +175,7 @@ class TernaryDINOv3TRMClassifier(nn.Module):
         self.dropout = dropout
         self.scale_op = scale_op
         self.track_latent_grads = track_latent_grads
+        self.backbone_kwargs = backbone_kwargs
 
         # Checkpoint helpers serialize ``model.init_config`` alongside the
         # state dict. Keep this dictionary limited to this class's constructor
@@ -197,8 +197,8 @@ class TernaryDINOv3TRMClassifier(nn.Module):
             cls=DinoVisionTransformerTRM,
             img_size=image_size,
             in_chans=in_chans,
-            no_conv=True,
             drop_path_rate=0.0,
+            **(backbone_kwargs or {}),
         )
         self.backbone.init_weights()
 
@@ -238,6 +238,7 @@ class TernaryDINOv3TRMClassifier(nn.Module):
             dropout=self.dropout,
             scale_op=self.scale_op,
             track_latent_grads=self.track_latent_grads,
+            backbone_kwargs=self.backbone_kwargs,
         )
 
     def forward(
@@ -655,7 +656,8 @@ def main() -> None:
         dropout=args.dropout,
         scale_op=args.scale_op,
         track_latent_grads=args.track_latent_grads,
-    ).to(device)
+        backbone_kwargs={"no_conv":True, # no any cnn layer        
+    }).to(device)
 
     optimizer = torch.optim.AdamW(
         model.parameters(),
